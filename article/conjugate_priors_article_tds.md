@@ -327,7 +327,7 @@ The complete implementation is in our Jupyter notebook, which includes:
 
 **GitHub Repository:** https://github.com/gauravchawla/conjugate-priors-cybersecurity
 
-**Google Colab:** *(link after publication)*
+**Google Colab:** *https://github.com/getgaurav2/conjugate-priors-cybersecurity/blob/main/notebooks/conjugate_priors_cybersecurity_detection.ipynb*
 
 **LANL Dataset:** [csr.lanl.gov/data/cyber1](https://csr.lanl.gov/data/cyber1/)
 
@@ -363,8 +363,8 @@ The mathematics worked exactly as theory predicted: posterior updates through si
 - LANL Comprehensive Multi-Source Cyber-Security Events: [csr.lanl.gov/data/cyber1](https://csr.lanl.gov/data/cyber1/)
 
 **Code:**
-- GitHub: https://github.com/gauravchawla/conjugate-priors-cybersecurity
-- Colab notebook: *(link after publication)*
+- GitHub: https://github.com/getgaurav2/conjugate-priors-cybersecurity
+- Colab notebook: *https://github.com/getgaurav2/conjugate-priors-cybersecurity/blob/main/notebooks/conjugate_priors_cybersecurity_detection.ipynb*
 
 ---
 *All results produced on the unmodified LANL dataset. Code is fully reproducible — see the GitHub repository.*
