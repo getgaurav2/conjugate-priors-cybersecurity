@@ -5,7 +5,7 @@ Companion code for the Towards Data Science article
 
 Demonstrates **Dirichlet-Categorical conjugate priors** applied to enterprise authentication anomaly detection on the LANL dataset (1.6 billion events, 749 red team attacks).
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gauravchawla/conjugate-priors-cybersecurity/blob/main/notebooks/conjugate_priors_cybersecurity_detection.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/getgaurav2/conjugate-priors-cybersecurity/blob/main/notebooks/conjugate_priors_cybersecurity_detection.ipynb)
 
 ---
 
