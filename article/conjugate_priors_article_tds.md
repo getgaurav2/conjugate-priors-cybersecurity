@@ -4,11 +4,11 @@
 
 ---
 
-Bayesian statistics offers a principled way to combine prior knowledge with observed data to update beliefs. But there's a computational challenge: updating beliefs typically requires complex numerical integration or iterative optimization algorithms.
+Bayesian statistics offers a principled way to combine prior knowledge with observed data to update beliefs. But there is a computational challenge: updating beliefs typically requires complex numerical integration or iterative optimization algorithms.
 
-**Conjugate priors** solve this elegantly. When you choose priors from specific mathematical families, belief updates become simple arithmetic—no optimization required, no convergence concerns, just pure mathematical elegance.
+**Conjugate priors** solve this elegantly. When you choose priors from specific mathematical families, belief updates become simple arithmetic — no optimization required, no convergence concerns, just pure mathematical elegance.
 
-This article will walk you through the theory and practice of conjugate priors, using a real cybersecurity dataset with 1.6 billion authentication events to demonstrate concepts that might seem abstract in textbooks.
+This article walks you through the theory and practice of conjugate priors, using a real cybersecurity dataset with 1.6 billion authentication events to demonstrate concepts that often seem abstract in textbooks.
 
 ## The Foundation: Bayesian Inference
 
@@ -30,12 +30,12 @@ In most cases, computing the posterior requires solving complex integrals:
 
 $$P(\theta | \text{data}) = \frac{P(\text{data} | \theta) \cdot P(\theta)}{\int P(\text{data} | \theta') \cdot P(\theta') \, d\theta'}$$
 
-The denominator—the marginal likelihood or evidence—often has no closed-form solution, requiring:
+The denominator — the marginal likelihood — often has no closed-form solution, requiring:
 - Markov Chain Monte Carlo (MCMC) sampling
 - Variational approximation methods  
-- Numerical integration techniques
+- Numerical integration
 
-These approaches work but involve approximation, convergence monitoring, and computational complexity.
+These approaches work, but involve approximation, convergence monitoring, and significant computational overhead.
 
 ## Enter Conjugate Priors: Mathematical Elegance
 
@@ -43,18 +43,14 @@ These approaches work but involve approximation, convergence monitoring, and com
 
 **Conjugate priors** are probability distributions chosen so that the posterior belongs to the same family as the prior. When this happens, Bayes' theorem reduces to simple parameter updates.
 
-**Definition:** A prior distribution P(θ) is conjugate to a likelihood function P(data | θ) if the posterior P(θ | data) has the same distributional form as the prior.
-
-### Why This Matters
+**Definition:** A prior P(θ) is conjugate to a likelihood P(data | θ) if the posterior P(θ | data) has the same distributional form as the prior.
 
 Instead of complex integration, you get:
 
 **Before data:** θ ~ Distribution(parameters₁)  
 **After data:** θ | data ~ Distribution(parameters₂)
 
-Where: parameters₂ = f(parameters₁, sufficient_statistics(data))
-
-The function f is typically simple addition or multiplication—no optimization needed.
+Where parameters₂ = f(parameters₁, sufficient\_statistics(data)) — typically just addition.
 
 ## The Dirichlet-Categorical Conjugate Pair
 
@@ -65,7 +61,7 @@ For categorical data, the natural conjugate pair is **Dirichlet-Categorical**:
 **Likelihood (Categorical):** 
 $$P(x_i = k | \boldsymbol{\theta}) = \theta_k$$
 
-where $\boldsymbol{\theta} = (\theta_1, \theta_2, \ldots, \theta_K)$ and $\sum_{k=1}^K \theta_k = 1$
+where $\boldsymbol{\theta} = (\theta_1, \ldots, \theta_K)$ and $\sum_{k=1}^K \theta_k = 1$
 
 **Prior (Dirichlet):**
 $$P(\boldsymbol{\theta}) = \text{Dir}(\boldsymbol{\alpha}) = \frac{\Gamma(\alpha_0)}{\prod_{k=1}^K \Gamma(\alpha_k)} \prod_{k=1}^K \theta_k^{\alpha_k - 1}$$
@@ -75,7 +71,7 @@ where $\alpha_0 = \sum_{k=1}^K \alpha_k$
 **Posterior (Also Dirichlet):**
 $$P(\boldsymbol{\theta} | \text{data}) = \text{Dir}(\boldsymbol{\alpha} + \boldsymbol{n})$$
 
-where $\boldsymbol{n} = (n_1, n_2, \ldots, n_K)$ are the observed counts for each category.
+where $\boldsymbol{n} = (n_1, \ldots, n_K)$ are the observed category counts.
 
 ### The Beautiful Update Rule
 
@@ -85,70 +81,56 @@ where $\boldsymbol{n} = (n_1, n_2, \ldots, n_K)$ are the observed counts for eac
 
 **Posterior:** $\boldsymbol{\theta} | \text{data} \sim \text{Dir}(\alpha_1 + n_1, \alpha_2 + n_2, \ldots, \alpha_K + n_K)$
 
-**That's it!** Just add the observed counts to the prior parameters.
+**That's it.** Just add the observed counts to the prior parameters. No optimization, no convergence, no approximation.
 
 ### Posterior Predictive Distribution
 
 For a new observation, the probability of category k is:
 
-$$P(\text{next observation} = k | \text{data}) = \frac{\alpha_k + n_k}{\alpha_0 + N}$$
+$$P(\text{next} = k | \text{data}) = \frac{\alpha_k + n_k}{\alpha_0 + N}$$
 
 where $N = \sum_{k=1}^K n_k$ is the total number of observations.
 
 ## Understanding the Prior Parameter α
 
-### Different Choices of α
+The prior parameter α controls how strongly you believe categories are equally likely before seeing any data.
 
-The prior parameter α controls your initial beliefs about the distribution:
+**Uniform Prior (α = 1):**
+- No initial preference for any category
+- Each category starts with 1 pseudo-observation
+- Use when you have no domain knowledge
 
-**Uniform Prior (α = 1 for all categories):**
-$$P(\boldsymbol{\theta}) = \text{Dir}(1, 1, \ldots, 1)$$
-- **Interpretation:** No initial preference for any category
-- **Effect:** Each category starts with 1 "pseudo-observation"
-- **Use case:** When you have no domain knowledge
+**Strong Uniform Prior (α = 10):**
+- Takes more data to shift beliefs away from uniform
+- Use when you're confident categories should be balanced
 
-**Strong Uniform Prior (α = 10 for all categories):**
-$$P(\boldsymbol{\theta}) = \text{Dir}(10, 10, \ldots, 10)$$
-- **Interpretation:** Strong belief that all categories are equally likely
-- **Effect:** Takes more data to shift beliefs away from uniform
-- **Use case:** When you're confident categories should be balanced
+**Sparse Prior (α < 1):**
+- Encourages most categories to have low probability
+- Use when most categories should be rare
 
-**Informative Prior (different α values):**
-$$P(\boldsymbol{\theta}) = \text{Dir}(50, 5, 1, 1)$$
-- **Interpretation:** Strong belief that category 1 is most common
-- **Effect:** New data updates around this initial belief
-- **Use case:** When domain knowledge suggests specific patterns
+**Impact on anomaly scoring** — for a computer that has seen N=1000 events across 4 auth types, and encounters an unseen type:
 
-**Sparse Prior (α < 1 for all categories):**
-$$P(\boldsymbol{\theta}) = \text{Dir}(0.1, 0.1, \ldots, 0.1)$$
-- **Interpretation:** Belief that most categories should have low probability
-- **Effect:** Encourages sparse solutions
-- **Use case:** When most categories should be rare
+| α Value | P(unseen category) | Anomaly Score | Effect |
+|---------|-------------------|---------------|--------|
+| 0.1 | 9.99 × 10⁻⁵ | 9.21 | Very sensitive to novelty |
+| 1.0 | 9.95 × 10⁻⁴ | 6.91 | Balanced |
+| 10.0 | 9.52 × 10⁻³ | 4.65 | Conservative, harder to flag |
 
-### Mathematical Impact on Posterior
+The formula: $P(\text{unseen}) = \frac{\alpha}{(K+1)\alpha + N}$
 
-With prior $\text{Dir}(\boldsymbol{\alpha})$ and observed counts $\boldsymbol{n}$:
-
-**Posterior mean for category k:**
-$$E[\theta_k | \text{data}] = \frac{\alpha_k + n_k}{\alpha_0 + N}$$
-
-**Posterior variance for category k:**
-$$\text{Var}[\theta_k | \text{data}] = \frac{(\alpha_k + n_k)(\alpha_0 + N - \alpha_k - n_k)}{(\alpha_0 + N)^2(\alpha_0 + N + 1)}$$
-
-**Key insight:** Larger α values increase the "effective sample size" of the prior, making it harder for data to change your beliefs.
+With large training data (N = 29.4M), different α values produce nearly identical scores — the prior washes out. At the per-computer level (N = 100–10,000 events), α meaningfully controls sensitivity. This is why α = 1 is a good default: it provides regularization at the computer level without distorting the global picture.
 
 ## Case Study: Enterprise Authentication Anomaly Detection
 
 ### The Dataset
 
-We demonstrate these concepts using the Los Alamos National Laboratory (LANL) cybersecurity dataset:
+We demonstrate these concepts on the **Los Alamos National Laboratory (LANL) cybersecurity dataset**:
 
 - **1.648 billion authentication events** over 58 days
 - **12,425 users** across **17,684 computers**  
-- **Four main authentication types:** Kerberos, NTLM, Basic, Certificate
 - **749 red team attack events** hidden among normal activity
 
-**Each authentication event contains:**
+Each authentication event contains:
 ```
 timestamp, source_user, dest_user, source_computer, dest_computer, 
 auth_type, logon_type, auth_orientation, success_status
@@ -156,39 +138,36 @@ auth_type, logon_type, auth_orientation, success_status
 
 ### Our Modeling Approach
 
-We model **two categorical distributions** for each computer using Dirichlet-Categorical conjugate priors:
+We model **two categorical distributions per computer** using Dirichlet-Categorical conjugate priors:
 
 **Model 1: Authentication Type Distribution**
-$$\boldsymbol{\theta}_{\text{auth}}^{(c)} \sim \text{Dir}(\alpha, \alpha, \alpha, \alpha)$$
+$$\boldsymbol{\theta}_{\text{auth}}^{(c)} \sim \text{Dir}(\alpha, \ldots, \alpha)$$
 $$\text{auth\_type} | \text{computer } c \sim \text{Categorical}(\boldsymbol{\theta}_{\text{auth}}^{(c)})$$
 
 **Model 2: Source User Distribution**  
-$$\boldsymbol{\theta}_{\text{user}}^{(c)} \sim \text{Dir}(\alpha, \alpha, \ldots, \alpha)$$
+$$\boldsymbol{\theta}_{\text{user}}^{(c)} \sim \text{Dir}(\alpha, \ldots, \alpha)$$
 $$\text{source\_user} | \text{computer } c \sim \text{Categorical}(\boldsymbol{\theta}_{\text{user}}^{(c)})$$
 
 ### Why These Two Features?
 
 **Authentication Type Patterns:** Different computers serve different roles:
 - **Domain controllers:** Almost exclusively Kerberos
-- **Web servers:** Mix of Basic and Certificate authentication
-- **Workstations:** Primarily Kerberos with some NTLM
+- **Legacy servers:** Heavy NTLM usage
+- **Workstations:** Mixed Kerberos/unknown system authentications
 
 **User Access Patterns:** Each computer has typical users:
-- **Personal workstations:** 95% owner, 5% IT support
+- **Personal workstations:** Dominated by the owner
 - **Servers:** Specific administrator groups
 - **Shared resources:** Known communities of users
 
 ### Our Prior Choice: Uniform (α = 1)
 
-We chose **symmetric Dirichlet priors** with α = 1 for all categories:
-
-$$P(\boldsymbol{\theta}) = \text{Dir}(1, 1, 1, 1) \text{ for authentication types}$$
-$$P(\boldsymbol{\theta}) = \text{Dir}(1, 1, \ldots, 1) \text{ for users}$$
+We chose symmetric Dirichlet priors with α = 1 for all categories:
 
 **Rationale:**
 - **No domain bias:** We don't assume any authentication type is inherently more common
-- **Minimal prior influence:** α = 1 provides just enough regularization to handle unseen categories
-- **Data-driven learning:** Patterns emerge from observations, not assumptions
+- **Minimal prior influence:** Lets data drive the learning
+- **Natural regularization:** Prevents zero probabilities for unseen categories
 
 ## Implementation and Evaluation Strategy
 
@@ -198,160 +177,161 @@ $$P(\boldsymbol{\theta}) = \text{Dir}(1, 1, \ldots, 1) \text{ for users}$$
 
 - **Training period:** All data before the first red team attack
 - **Test period:** During and after the attack period
-- **Rationale:** Models must learn only from "normal" historical data
 
 ### Label Generation Strategy
 
-**Computer-Window Approach:** Label any access to compromised computers during the attack period as suspicious.
+**Computer-Window Approach:** Label any access to a compromised computer during the attack period as suspicious.
 
-**Why this strategy:**
-- **Exact timestamp matching:** Found only 3 attacks out of 749 red team events
-- **Computer-window approach:** Found 1,247 attack events
-- **Trade-off:** Some label noise, but much stronger signal for evaluation
-
-This demonstrates an important principle: practical approximations often outperform theoretically pure approaches.
+Exact timestamp matching found only 3 of 749 red team events in the authentication log (the rest were on machines not captured). The computer-window approach found **1,247 suspicious-window events** — enough signal for reliable evaluation.
 
 ### Anomaly Score Calculation
 
-For each authentication event:
-
-$$\text{auth\_score} = -\log P(\text{auth\_type} | \text{computer\_history})$$
-$$\text{user\_score} = -\log P(\text{source\_user} | \text{computer\_history})$$
+$$\text{auth\_score} = -\log P(\text{auth\_type} \mid \text{computer history})$$
+$$\text{user\_score} = -\log P(\text{source\_user} \mid \text{computer history})$$
 $$\text{combined\_score} = \frac{\text{auth\_score} + \text{user\_score}}{2}$$
 
-**Interpretation:** Higher scores indicate more surprising/anomalous events.
+**Interpretation:** Higher scores = more surprising = more anomalous.
 
 ## Results and Analysis
 
-*[Complete runnable implementation available on GitHub: [link-to-be-added]]*
+*[Complete runnable implementation available on GitHub — link below]*
 
 ### What the Algorithm Learned
 
-**Global Authentication Distribution:**
+**Global Authentication Distribution** (29.4M training events, 6 normalized auth types):
 
-*[PLACEHOLDER FOR AUTHENTICATION PATTERNS CHART]*
+![Authentication Type Distribution](../plots/auth_distribution.png)
 
-The Bayesian models discovered these patterns in the LANL data:
+| Auth Type | Events | % of Total | Anomaly Score (global) |
+|-----------|--------|------------|------------------------|
+| ? (Unknown system auth) | 17,004,222 | 57.8% | 0.55 |
+| Kerberos | 10,367,997 | 35.2% | 1.04 |
+| NTLM | 1,431,374 | 4.9% | 3.02 |
+| Negotiate | 604,153 | 2.1% | 3.89 |
+| MSAUTHPKG | ~16,239 | 0.1% | 7.82 |
+| Wave | 6 | 0.0% | 15.25 |
+
+The "?" category represents local system authentications where the protocol type was not logged — a common artifact in enterprise Windows environments. The model learns this is the norm and assigns it a low anomaly score.
+
+**Computer Specialization** — each machine develops a unique authentication fingerprint:
+
+![Computer Specialization](../plots/computer_specialization.png)
 
 ```
-Kerberos:    25,234,156 events (86.2%) - Low anomaly score
-NTLM:         3,891,423 events (13.3%) - Moderate anomaly score  
-Basic:           45,123 events (0.2%)  - High anomaly score
-Certificate:          3 events (0.0%)  - Extremely high anomaly score
+C586  (3.6M events):  49.9% Unknown system auth  → high-traffic domain resource
+C625  (1.97M events): 56.2% Unknown system auth  → active infrastructure node  
+C988  (269K events):  48.0% Unknown system auth  → mid-tier server
+C1020 (156 events):   74.4% Unknown system auth  → isolated/edge system
+C1069 (149 events):   74.5% Unknown system auth  → isolated/edge system
 ```
 
-**Computer Specialization Examples:**
-```
-C12847: 98.2% Kerberos    # Likely domain workstation
-C09234: 95.1% NTLM        # Legacy system
-C15678: 92.3% Basic       # Web service  
-C08901: 89.7% Certificate # Secure service
-```
+Deviations from these per-computer norms are what drive anomaly scores up.
 
 ### Performance Results
 
-*[PLACEHOLDER FOR ROC CURVE]*
+![ROC Curve](../plots/roc_curve.png)
 
-*[PLACEHOLDER FOR PRECISION-RECALL CURVE]*
+![Precision-Recall Curve](../plots/pr_curve.png)
 
 Our Bayesian approach achieved strong performance:
 
-- **AUC-ROC: 0.724** - Significantly above random (0.5)
-- **Training scale:** 29.4 million clean events, 10,413 computer models
-- **1,247 attack events found** using computer-window labeling
-- **Clear score separation:** Attack events (mean: 8.23) vs Normal events (mean: 5.41)
+- **AUC-ROC: 0.8269** — significantly above random (0.5)
+- **Training scale:** 29.4 million events, 10,413 computer models built
+- **1,247 suspicious-window events** identified for evaluation
+- **Clear score separation:** Attack events (mean: 4.24) vs Normal events (mean: 2.12)
 
-*[PLACEHOLDER FOR SCORE DISTRIBUTION PLOT]*
+![Score Distributions](../plots/score_distributions.png)
 
 ### Statistical Significance
 
 **Score Separation Analysis:**
-- **Cohen's d = 1.342:** Large effect size (>0.8 considered large)
-- **Mann-Whitney U p < 10⁻⁸⁰:** Highly statistically significant
-- **Clear separation:** Attack and normal score distributions are distinct
+- **Cohen's d = 1.343** — large effect size (>0.8 is considered large in social science; >1.0 is exceptional)
+- **Mann-Whitney U p < 10⁻⁸⁰** — highly statistically significant
+- The two score distributions are clearly distinct
 
-*[PLACEHOLDER FOR PRECISION@K PLOT]*
+### Operational Performance: Precision@K
 
-### The Power of α = 1 (Uniform Prior)
+In a real SOC, analysts review the top-K alerts — not a threshold. Precision@K measures how many of those top alerts are real attacks:
 
-With our choice of α = 1 for all categories:
+![Precision@K](../plots/precision_at_k.png)
 
-**For Certificate authentication (seen 3 times globally):**
-$$P(\text{Certificate} | \text{global data}) = \frac{1 + 3}{29,170,706 + 4} ≈ 1.37 \times 10^{-7}$$
+| K | Precision@K | Meaning |
+|---|-------------|---------|
+| 10 | 40% | 4 of the top 10 alerts are real attacks |
+| 25 | 40% | 10 of 25 are real attacks |
+| 50 | 28% | 14 of 50 are real attacks |
+| 100 | 29% | 29 of 100 are real attacks |
 
-**Anomaly score:** $-\log(1.37 \times 10^{-7}) ≈ 15.8$ (very high!)
+Given the 1:100 class imbalance in our evaluation set, random guessing would give ~1%. Our model achieves 20–40× random at small K values.
 
-**Effect of different α choices:**
+### The Effect of α — Confirmed on Real Data
 
-| α Value | Certificate Probability | Anomaly Score | Effect |
-|---------|------------------------|---------------|--------|
-| 0.1 | 1.07 × 10⁻⁷ | 16.1 | Very sensitive |
-| 1.0 | 1.37 × 10⁻⁷ | 15.8 | Balanced |
-| 10.0 | 1.30 × 10⁻⁶ | 13.5 | Conservative |
+![Alpha Sensitivity](../plots/alpha_sensitivity.png)
 
-Our choice of α = 1 struck a balance between data-driven learning and reasonable handling of unseen categories.
+The left panel shows how anomaly scores decrease as a category is observed more frequently — the model is learning the normal pattern. All α values converge to the same scores as observations accumulate.
+
+The right panel shows the score for a completely unseen auth type as training data grows. The key insight: **at the scale of the LANL dataset (N = 29.4M), all α choices produce nearly identical results**. The prior only matters when data is sparse — which is exactly when you need it most (small per-computer models for edge systems).
 
 ## Key Insights About Conjugate Priors
 
 ### Mathematical Elegance
 
-**Online Learning:** Each new observation updates the posterior parameters by simple addition:
+**Online Learning:** Each new observation updates the posterior by simple addition:
 $$\text{Dir}(\alpha_1, \ldots, \alpha_K) \xrightarrow{\text{observe } x_j} \text{Dir}(\alpha_1, \ldots, \alpha_j + 1, \ldots, \alpha_K)$$
 
 **No Optimization:** Unlike gradient-based methods, conjugate priors give exact analytical updates.
 
-**Natural Uncertainty:** The Dirichlet posterior provides full probability distributions, not just point estimates.
+**Natural Uncertainty:** The Dirichlet posterior provides full probability distributions, not point estimates.
 
 ### Practical Advantages
 
 **Computational Efficiency:** 
-- Training: O(n) time complexity
-- Inference: O(1) time per prediction  
-- Memory: Scales with unique categories, not total events
+- Training: O(n) time — one pass through the data
+- Inference: O(1) per prediction
+- Memory: scales with unique categories, not total events
 
 **Interpretability:**
-- Posterior parameters have clear meaning (pseudo-counts)
-- Anomaly scores map directly to surprisal (-log probability)
-- Easy to explain to domain experts
+- Posterior parameters have a clear meaning: pseudo-counts
+- Anomaly scores map directly to surprisal (−log probability)
+- Easy to explain: "this auth type was never seen on this machine"
 
 **Robustness:**
-- Graceful handling of rare/unseen categories
-- No hyperparameter tuning required
-- Natural regularization through the prior
+- Graceful handling of unseen categories via the prior
+- No hyperparameter tuning (α = 1 works well across scales)
+- No convergence to monitor
 
 ### When Conjugate Priors Excel
 
-Based on our experience with the LANL dataset:
-
 **Perfect for:**
-- **Categorical data** with natural hierarchical structure
-- **Online/streaming learning** requirements
-- **Interpretable results** needed for stakeholders  
-- **Sparse observations** and unseen categories
-- **Real-time applications** requiring fast updates
+- Categorical data with natural hierarchical structure
+- Online/streaming learning requirements
+- Interpretable results needed for stakeholders  
+- Sparse observations and unseen categories
+- Real-time applications requiring fast updates
 
 **Consider alternatives for:**
 - High-dimensional continuous data
-- Complex non-linear patterns
-- Problems with abundant labeled data
-- Tasks requiring deep representation learning
+- Complex non-linear temporal patterns
+- Problems with abundant labeled data for supervised learning
 
 ## Implementation Details
 
-The complete implementation is available in our Jupyter notebook, which includes:
+The complete implementation is in our Jupyter notebook, which includes:
 
 - **DirichletCategorical class:** Core mathematical implementation
 - **EnterpriseAuthDetector:** Multi-signal anomaly detection system  
-- **Data loading and preprocessing:** Handling 1.6B authentication events
+- **Data loading and preprocessing:** Handles 1.6B authentication events efficiently
 - **Temporal evaluation:** Realistic train/test splits
-- **Comprehensive metrics:** ROC, PR curves, Precision@K
+- **Comprehensive metrics:** ROC, PR curves, Precision@K, Cohen's d
 - **Visualization tools:** All plots shown in this article
 
-**GitHub Repository:** *[link-to-be-added]*
+**GitHub Repository:** https://github.com/gauravchawla/conjugate-priors-cybersecurity
 
-**Google Colab:** *[notebook-link-to-be-added]*
+**Google Colab:** *(link after publication)*
 
-The notebook is fully self-contained and can be run on standard Colab hardware.
+**LANL Dataset:** [csr.lanl.gov/data/cyber1](https://csr.lanl.gov/data/cyber1/)
+
+The notebook runs on standard Colab hardware (expected runtime: 15–20 minutes).
 
 ## Conclusion
 
@@ -360,15 +340,15 @@ Conjugate priors represent mathematical elegance in action. By choosing probabil
 $$\text{Complex Bayesian Inference} \rightarrow \text{Simple Arithmetic}$$
 
 Our cybersecurity example demonstrated this elegance with real-world data:
-- **29.4 million training events** processed efficiently
-- **Real-time scoring** of authentication patterns  
-- **Interpretable anomaly scores** based on principled probability theory
-- **No hyperparameter tuning** required
-- **Strong performance** on challenging imbalanced data
+- **29.4 million training events** processed in a single pass
+- **10,413 per-computer behavioral models** built automatically  
+- **Real-time anomaly scoring** based on principled probability theory
+- **No hyperparameter tuning** required beyond the α = 1 choice
+- **AUC-ROC of 0.8269** — strong performance on highly imbalanced data
 
-The mathematics worked exactly as the theory predicted: posterior updates through simple addition, natural uncertainty quantification, and elegant handling of sparse categorical data.
+The mathematics worked exactly as theory predicted: posterior updates through simple addition, natural uncertainty quantification, and elegant handling of sparse categorical data.
 
-**The deeper lesson:** Sometimes the most sophisticated approach is also the most mathematically principled one. When your data and problem structure align with conjugate prior assumptions, you get both theoretical elegance and practical performance.
+**The deeper lesson:** Sometimes the most principled approach is also the simplest one. When your data structure aligns with conjugate prior assumptions, you get both mathematical rigour and practical performance.
 
 **Next time you encounter categorical data with streaming requirements, consider reaching for this 250-year-old mathematical framework. The elegance might surprise you.**
 
@@ -379,9 +359,12 @@ The mathematics worked exactly as the theory predicted: posterior updates throug
 - Murphy, K. *Machine Learning: A Probabilistic Perspective*  
 - Bishop, C. *Pattern Recognition and Machine Learning*
 
-**Implementation:**
-- Complete code: *[GitHub repository link]*
-- Runnable notebook: *[Colab notebook link]*
-- LANL dataset: [csr.lanl.gov/data/cyber1/](https://csr.lanl.gov/data/cyber1/)
+**Dataset:**
+- LANL Comprehensive Multi-Source Cyber-Security Events: [csr.lanl.gov/data/cyber1](https://csr.lanl.gov/data/cyber1/)
 
-*Understanding conjugate priors opens doors to a whole class of elegant Bayesian methods. This example is just the beginning.*
+**Code:**
+- GitHub: https://github.com/gauravchawla/conjugate-priors-cybersecurity
+- Colab notebook: *(link after publication)*
+
+---
+*All results produced on the unmodified LANL dataset. Code is fully reproducible — see the GitHub repository.*
