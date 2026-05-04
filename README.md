@@ -127,6 +127,6 @@ MIT — see LICENSE.
   author  = {Chawla, Gaurav},
   journal = {Towards Data Science},
   year    = {2026},
-  url     = {https://github.com/gauravchawla/conjugate-priors-cybersecurity}
+  url     = {https://github.com/getgaurav2/conjugate-priors-cybersecurity}
 }
 ```
