@@ -192,6 +192,52 @@ $$\text{combined\_score} = \frac{\text{auth\_score} + \text{user\_score}}{2}$$
 
 **Interpretation:** Higher scores = more surprising = more anomalous.
 
+## A Concrete Example: Scoring One Authentication Event
+
+Before examining results at scale, let's trace exactly what the algorithm computes for a single event. Computer **C586** is a high-traffic domain resource with 3.6 million total events.
+
+**What the model learned about C586** (after 3.3M training events):
+
+| Auth Type | Training Count | Posterior P(k \| C586) | Anomaly Score |
+|-----------|---------------|------------------------|---------------|
+| ? (Unknown) | 1,799,522 | 0.5412 | 0.61 |
+| Kerberos | 1,269,685 | 0.3818 | 0.96 |
+| NTLM | 176,746 | 0.0532 | 2.93 |
+| Negotiate | 75,748 | 0.0228 | 3.78 |
+| MSAUTHPKG | 3,607 | 0.0011 | 6.83 |
+
+Each row is just $P(k \mid C586) = \frac{\alpha + n_k}{K\alpha + N}$ — division and a logarithm.
+
+### Scenario 1 — Normal event
+
+```
+source_user=U12@DOM1,  dest_computer=C586,  auth_type=Kerberos
+```
+
+U12@DOM1 is the primary service account (2.89M of 3.6M events). Kerberos is C586's dominant protocol.
+
+$$\text{auth\_score} = -\log\frac{1 + 1{,}269{,}685}{5 \times 1 + 3{,}325{,}308} = -\log(0.3818) = 0.96$$
+
+$$\text{user\_score} = -\log\frac{1 + 2{,}890{,}000}{4 \times 1 + 3{,}607{,}060} = -\log(0.8012) = 0.22$$
+
+$$\text{combined\_score} = \frac{0.96 + 0.22}{2} = \mathbf{0.59} \quad \leftarrow \text{routine}$$
+
+### Scenario 2 — Suspicious event
+
+```
+source_user=U9999@DOM1 (never seen),  dest_computer=C586,  auth_type=NTLM
+```
+
+NTLM is rare but present in C586's history. U9999 has never accessed this machine — the Dirichlet prior absorbs the new user category (K becomes K+1 = 5):
+
+$$\text{auth\_score} = -\log\frac{1 + 176{,}746}{5 \times 1 + 3{,}325{,}308} = -\log(0.0532) = 2.93$$
+
+$$\text{user\_score} = -\log\frac{1 + 0}{5 \times 1 + 3{,}607{,}060} = -\log(2.77 \times 10^{-7}) = 15.10$$
+
+$$\text{combined\_score} = \frac{2.93 + 15.10}{2} = \mathbf{9.02} \quad \leftarrow \text{15× higher — analyst alert}$$
+
+The key insight: the prior prevents a zero-probability crash on the unseen user while still producing a high anomaly score. No retraining, no thresholds — just arithmetic. The model applies this same computation to all 10,413 computers simultaneously.
+
 ## Results and Analysis
 
 *[Complete runnable implementation available on GitHub — link below]*
@@ -241,28 +287,6 @@ Our Bayesian approach achieved strong performance:
 - **Clear score separation:** Attack events (mean: 4.24) vs Normal events (mean: 2.12)
 
 ![Score Distributions](../plots/score_distributions.png)
-
-### Statistical Significance
-
-**Score Separation Analysis:**
-- **Cohen's d = 1.343** — large effect size (>0.8 is considered large in social science; >1.0 is exceptional)
-- **Mann-Whitney U p < 10⁻⁸⁰** — highly statistically significant
-- The two score distributions are clearly distinct
-
-### Operational Performance: Precision@K
-
-In a real SOC, analysts review the top-K alerts — not a threshold. Precision@K measures how many of those top alerts are real attacks:
-
-![Precision@K](../plots/precision_at_k.png)
-
-| K | Precision@K | Meaning |
-|---|-------------|---------|
-| 10 | 40% | 4 of the top 10 alerts are real attacks |
-| 25 | 40% | 10 of 25 are real attacks |
-| 50 | 28% | 14 of 50 are real attacks |
-| 100 | 29% | 29 of 100 are real attacks |
-
-Given the 1:100 class imbalance in our evaluation set, random guessing would give ~1%. Our model achieves 20–40× random at small K values.
 
 ### The Effect of α — Confirmed on Real Data
 
