@@ -369,7 +369,7 @@ The complete implementation is in our Jupyter notebook, which includes:
 - **Comprehensive metrics:** ROC, PR curves, Precision@K, Cohen's d
 - **Visualization tools:** All plots shown in this article
 
-**GitHub Repository:** https://github.com/gauravchawla/conjugate-priors-cybersecurity
+**GitHub Repository:** https://github.com/getgaurav2/conjugate-priors-cybersecurity
 
 **Google Colab:** *https://github.com/getgaurav2/conjugate-priors-cybersecurity/blob/main/notebooks/conjugate_priors_cybersecurity_detection.ipynb*
 
