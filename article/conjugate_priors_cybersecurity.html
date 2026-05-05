@@ -118,6 +118,18 @@ blockquote { border-left: 3px solid #aaa; margin: 10pt 0 10pt 10pt;
 
 <p><strong>That's it.</strong> Just add the observed counts to the prior parameters. No optimization, no convergence, no approximation.</p>
 
+<p>The update rule translates directly into two lines of code:</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">counts</span><span class="p">[</span><span class="n">obs</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>   <span class="c1"># n_k += 1 for the observed category</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total</span> <span class="o">+=</span> <span class="mi">1</span>         <span class="c1"># N += 1 — total event count</span>
+</code></pre>
+</div>
+
+<p>No matrix operations, no learning rate, no batch size. Each authentication event increments two integers.</p>
+
 <h3 id="posterior-predictive-distribution">Posterior Predictive Distribution</h3>
 
 <p>For a new observation, the probability of category k is:</p>
@@ -261,6 +273,22 @@ auth_type, logon_type, auth_orientation, success_status
 <div class="math-display">\[\text{combined\_score} = \frac{\text{auth\_score} + \text{user\_score}}{2}\]</div>
 
 <p><strong>Interpretation:</strong> Higher scores = more surprising = more anomalous.</p>
+
+<p>The scoring formula maps directly to code. Note how the <code>K+1</code> for unseen categories — explained in the worked example below — appears as a single conditional:</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">def</span> <span class="nf">anomaly_score</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">category</span><span class="p">):</span>
+    <span class="n">n_k</span>     <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">category</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>          <span class="c1"># 0 if never seen</span>
+    <span class="n">K</span>       <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">counts</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">category</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts</span><span class="p">:</span>
+        <span class="n">K</span>  <span class="o">+=</span> <span class="mi">1</span>                                     <span class="c1"># unseen: K -&gt; K+1</span>
+    <span class="n">alpha_0</span> <span class="o">=</span> <span class="n">K</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha_prior</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">total</span>     <span class="c1"># denominator</span>
+    <span class="n">prob</span>    <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha_prior</span> <span class="o">+</span> <span class="n">n_k</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha_0</span>
+    <span class="k">return</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span>
+</code></pre>
+</div>
+
+<p>The full implementation, including per-computer models and a global fallback, is in the companion notebook.</p>
 
 <h2 id="a-concrete-example-scoring-one-authentication-event">A Concrete Example: Scoring One Authentication Event</h2>
 
@@ -527,19 +555,27 @@ C1069 (149 events):   74.5% Unknown system auth  → isolated/edge system
 - No hyperparameter tuning (α = 1 works well across scales)
 - No convergence to monitor</p>
 
-<h3 id="when-conjugate-priors-excel">When Conjugate Priors Excel</h3>
+<h3 id="when-to-use-this-approach">When to Use This Approach</h3>
 
-<p><strong>Perfect for:</strong>
-- Categorical data with natural hierarchical structure
-- Online/streaming learning requirements
-- Interpretable results needed for stakeholders<br />
-- Sparse observations and unseen categories
-- Real-time applications requiring fast updates</p>
-
-<p><strong>Consider alternatives for:</strong>
-- High-dimensional continuous data
-- Complex non-linear temporal patterns
-- Problems with abundant labeled data for supervised learning</p>
+<blockquote>
+  <p><strong>Reach for Dirichlet-Categorical conjugate priors when your problem has:</strong></p>
+  
+  <ul>
+  <li><strong>Categorical inputs</strong> — authentication types, user identities, protocol classes, event categories</li>
+  <li><strong>Online / streaming updates</strong> — each new event updates the model in O(1); no retraining loop</li>
+  <li><strong>Per-entity models at scale</strong> — 10,000 independent computer models, each updated with a single integer increment</li>
+  <li><strong>Sparse data and unseen categories</strong> — the prior automatically handles zero-count categories without special-casing</li>
+  <li><strong>Interpretability requirements</strong> — every score has a direct meaning: "this event type appeared 3 times in 5,000 observations"</li>
+  </ul>
+  
+  <p><strong>When to look elsewhere:</strong></p>
+  
+  <ul>
+  <li>High-dimensional continuous features (Gaussian processes, kernel methods, neural networks)</li>
+  <li>Complex non-linear temporal dependencies (LSTMs, Transformers)</li>
+  <li>Problems with abundant labelled data where supervised models can learn richer representations</li>
+  </ul>
+</blockquote>
 
 <h2 id="implementation-details">Implementation Details</h2>
 

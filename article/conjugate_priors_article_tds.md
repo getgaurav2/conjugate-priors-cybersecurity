@@ -83,6 +83,17 @@ where $\boldsymbol{n} = (n_1, \ldots, n_K)$ are the observed category counts.
 
 **That's it.** Just add the observed counts to the prior parameters. No optimization, no convergence, no approximation.
 
+The update rule translates directly into two lines of code:
+
+```python
+def update(self, observations):
+    for obs in observations:
+        self.counts[obs] += 1   # n_k += 1 for the observed category
+        self.total += 1         # N += 1 — total event count
+```
+
+No matrix operations, no learning rate, no batch size. Each authentication event increments two integers.
+
 ### Posterior Predictive Distribution
 
 For a new observation, the probability of category k is:
@@ -191,6 +202,21 @@ $$\text{user\_score} = -\log P(\text{source\_user} \mid \text{computer history})
 $$\text{combined\_score} = \frac{\text{auth\_score} + \text{user\_score}}{2}$$
 
 **Interpretation:** Higher scores = more surprising = more anomalous.
+
+The scoring formula maps directly to code. Note how the `K+1` for unseen categories — explained in the worked example below — appears as a single conditional:
+
+```python
+def anomaly_score(self, category):
+    n_k     = self.counts.get(category, 0)          # 0 if never seen
+    K       = len(self.counts)
+    if category not in self.counts:
+        K  += 1                                     # unseen: K -> K+1
+    alpha_0 = K * self.alpha_prior + self.total     # denominator
+    prob    = (self.alpha_prior + n_k) / alpha_0
+    return -np.log(prob)
+```
+
+The full implementation, including per-computer models and a global fallback, is in the companion notebook.
 
 ## A Concrete Example: Scoring One Authentication Event
 
@@ -344,19 +370,21 @@ $$\text{Dir}(\alpha_1, \ldots, \alpha_K) \xrightarrow{\text{observe } x_j} \text
 - No hyperparameter tuning (α = 1 works well across scales)
 - No convergence to monitor
 
-### When Conjugate Priors Excel
+### When to Use This Approach
 
-**Perfect for:**
-- Categorical data with natural hierarchical structure
-- Online/streaming learning requirements
-- Interpretable results needed for stakeholders  
-- Sparse observations and unseen categories
-- Real-time applications requiring fast updates
-
-**Consider alternatives for:**
-- High-dimensional continuous data
-- Complex non-linear temporal patterns
-- Problems with abundant labeled data for supervised learning
+> **Reach for Dirichlet-Categorical conjugate priors when your problem has:**
+>
+> - **Categorical inputs** — authentication types, user identities, protocol classes, event categories
+> - **Online / streaming updates** — each new event updates the model in O(1); no retraining loop
+> - **Per-entity models at scale** — 10,000 independent computer models, each updated with a single integer increment
+> - **Sparse data and unseen categories** — the prior automatically handles zero-count categories without special-casing
+> - **Interpretability requirements** — every score has a direct meaning: "this event type appeared 3 times in 5,000 observations"
+>
+> **When to look elsewhere:**
+>
+> - High-dimensional continuous features (Gaussian processes, kernel methods, neural networks)
+> - Complex non-linear temporal dependencies (LSTMs, Transformers)
+> - Problems with abundant labelled data where supervised models can learn richer representations
 
 ## Implementation Details
 
