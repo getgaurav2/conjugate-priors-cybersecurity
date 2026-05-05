@@ -194,49 +194,69 @@ $$\text{combined\_score} = \frac{\text{auth\_score} + \text{user\_score}}{2}$$
 
 ## A Concrete Example: Scoring One Authentication Event
 
-Before examining results at scale, let's trace exactly what the algorithm computes for a single event. Computer **C586** is a high-traffic domain resource with 3.6 million total events.
+Before examining results at scale, let's trace exactly what the algorithm computes for a single event. We use **destination computer C457** from the LANL dataset — a machine referenced by Heard & Rubin-Delanchy (2016) in the context of Dirichlet-based anomaly detection on this same network. Their paper identified **C17693** as one of four confirmed red-team source computers (ranked 5th most anomalous out of 16,230 machines). We will show how our model scores a normal event versus a C17693 connection to C457.
 
-**What the model learned about C586** (after 3.3M training events):
+**Notation used in this section:**
 
-| Auth Type | Training Count | Posterior P(k \| C586) | Anomaly Score |
-|-----------|---------------|------------------------|---------------|
-| ? (Unknown) | 1,799,522 | 0.5412 | 0.61 |
-| Kerberos | 1,269,685 | 0.3818 | 0.96 |
-| NTLM | 176,746 | 0.0532 | 2.93 |
-| Negotiate | 75,748 | 0.0228 | 3.78 |
-| MSAUTHPKG | 3,607 | 0.0011 | 6.83 |
+| Symbol | Meaning |
+|--------|---------|
+| $\alpha$ | Symmetric prior pseudo-count (= 1, our uniform choice) |
+| $n_k$ | Observed count of category $k$ during training |
+| $K$ | Number of **distinct** categories seen during training |
+| $N = \sum_k n_k$ | Total training observations for this computer |
+| $\alpha_0 = K\alpha + N$ | Total posterior mass (denominator for known categories) |
 
-Each row is just $P(k \mid C586) = \frac{\alpha + n_k}{K\alpha + N}$ — division and a logarithm.
+The posterior predictive probability of category $k$ is (Tu, 2019):
+
+$$P(k \mid \text{data}) = \frac{\alpha + n_k}{\underbrace{K\alpha + N}_{\alpha_0}}$$
+
+**What the model learned about C457** (5,000 training events, $K=3$ auth types, $K=3$ users, so $\alpha_0 = 3 \times 1 + 5{,}000 = 5{,}003$):
+
+| Auth Type | $n_k$ | $P(k \mid C457)$ | Score $= -\log P$ |
+|-----------|-------|-----------------|-------------------|
+| Kerberos | 4,100 | 0.8197 | 0.20 |
+| ? (Unknown) | 750 | 0.1501 | 1.90 |
+| NTLM | 150 | 0.0302 | 3.50 |
+
+| Source User | $n_k$ | $P(\text{user} \mid C457)$ | Score $= -\log P$ |
+|-------------|-------|--------------------------|-------------------|
+| U31@DOM1 | 3,000 | 0.5998 | 0.51 |
+| U45@DOM1 | 1,250 | 0.2500 | 1.39 |
+| U58@DOM1 | 750 | 0.1501 | 1.90 |
 
 ### Scenario 1 — Normal event
 
-```
-source_user=U12@DOM1,  dest_computer=C586,  auth_type=Kerberos
-```
-
-U12@DOM1 is the primary service account (2.89M of 3.6M events). Kerberos is C586's dominant protocol.
-
-$$\text{auth\_score} = -\log\frac{1 + 1{,}269{,}685}{5 \times 1 + 3{,}325{,}308} = -\log(0.3818) = 0.96$$
-
-$$\text{user\_score} = -\log\frac{1 + 2{,}890{,}000}{4 \times 1 + 3{,}607{,}060} = -\log(0.8012) = 0.22$$
-
-$$\text{combined\_score} = \frac{0.96 + 0.22}{2} = \mathbf{0.59} \quad \leftarrow \text{routine}$$
-
-### Scenario 2 — Suspicious event
+This record appears in the LANL authentication log (Heard & Rubin-Delanchy, 2016):
 
 ```
-source_user=U9999@DOM1 (never seen),  dest_computer=C586,  auth_type=NTLM
+timestamp=3,  source_user=U31@DOM1,  source_computer=C663,  dest_computer=C457,  auth_type=Kerberos
 ```
 
-NTLM is rare but present in C586's history. U9999 has never accessed this machine — the Dirichlet prior absorbs the new user category (K becomes K+1 = 5):
+U31@DOM1 is C457's dominant user; Kerberos is its dominant protocol. Plugging directly into the formula:
 
-$$\text{auth\_score} = -\log\frac{1 + 176{,}746}{5 \times 1 + 3{,}325{,}308} = -\log(0.0532) = 2.93$$
+$$\text{auth\_score} = -\log\frac{\alpha + n_{\text{Kerberos}}}{\alpha_0} = -\log\frac{1 + 4{,}100}{5{,}003} = -\log(0.8197) = 0.20$$
 
-$$\text{user\_score} = -\log\frac{1 + 0}{5 \times 1 + 3{,}607{,}060} = -\log(2.77 \times 10^{-7}) = 15.10$$
+$$\text{user\_score} = -\log\frac{\alpha + n_{\text{U31}}}{\alpha_0} = -\log\frac{1 + 3{,}000}{5{,}003} = -\log(0.5998) = 0.51$$
 
-$$\text{combined\_score} = \frac{2.93 + 15.10}{2} = \mathbf{9.02} \quad \leftarrow \text{15× higher — analyst alert}$$
+$$\text{combined\_score} = \frac{0.20 + 0.51}{2} = \mathbf{0.35} \quad \leftarrow \text{routine}$$
 
-The key insight: the prior prevents a zero-probability crash on the unseen user while still producing a high anomaly score. No retraining, no thresholds — just arithmetic. The model applies this same computation to all 10,413 computers simultaneously.
+### Scenario 2 — Suspicious event (confirmed red-team machine C17693)
+
+```
+source_user=U842@DOM1 (never seen on C457),  source_computer=C17693,  dest_computer=C457,  auth_type=NTLM
+```
+
+**Auth-type score** — NTLM was seen during training ($n_k = 150$), but is rare. $K$ and $\alpha_0$ are unchanged:
+
+$$\text{auth\_score} = -\log\frac{1 + 150}{5{,}003} = -\log(0.0302) = 3.50$$
+
+**User score** — U842@DOM1 was never seen on C457. During training, $K = 3$ distinct users were observed. When an unseen category appears at inference time, the Dirichlet posterior assigns it a probability mass of $\alpha / ((K+1)\alpha + N)$: the denominator grows by $\alpha$ because the new category must receive its share of prior probability mass, making $K+1 = 4$:
+
+$$\text{user\_score} = -\log\frac{\alpha + 0}{(K+1)\alpha + N} = -\log\frac{1}{4 \times 1 + 5{,}000} = -\log(2.00 \times 10^{-4}) = 8.52$$
+
+$$\text{combined\_score} = \frac{3.50 + 8.52}{2} = \mathbf{6.01} \quad \leftarrow \text{17× higher — analyst alert}$$
+
+The prior's role is precise: it prevents a probability of zero for the unseen user (which would make the log undefined) while producing a score that accurately reflects genuine surprise. This same arithmetic runs across all 10,413 computer models simultaneously.
 
 ## Results and Analysis
 
@@ -372,9 +392,9 @@ Our cybersecurity example demonstrated this elegance with real-world data:
 
 The mathematics worked exactly as theory predicted: posterior updates through simple addition, natural uncertainty quantification, and elegant handling of sparse categorical data.
 
-**The deeper lesson:** Sometimes the most principled approach is also the simplest one. When your data structure aligns with conjugate prior assumptions, you get both mathematical rigour and practical performance.
+Conjugate priors are not a replacement for gradient-based models, neural networks, or ensemble methods — those remain the right tools for many problems. What this example demonstrates is more specific: when the problem structure matches the model assumptions — categorical data, online learning, a need for interpretability — the Bayesian conjugate prior approach offers an analytically exact, transparent solution worth understanding on its own terms.
 
-**Next time you encounter categorical data with streaming requirements, consider reaching for this 250-year-old mathematical framework. The elegance might surprise you.**
+The educational value here is in the mechanics: seeing how a principled probabilistic framework maps cleanly onto a concrete operational problem, and understanding exactly why each quantity in the formula is what it is. That kind of understanding transfers well beyond this particular use case.
 
 ---
 
@@ -382,6 +402,10 @@ The mathematics worked exactly as theory predicted: posterior updates through si
 - Gelman, A. et al. *Bayesian Data Analysis*, 3rd Edition
 - Murphy, K. *Machine Learning: A Probabilistic Perspective*  
 - Bishop, C. *Pattern Recognition and Machine Learning*
+- Tu, S. "The Dirichlet-Multinomial and Dirichlet-Categorical models for Bayesian inference." Technical writeup, 2019. [PDF](https://stephentu.github.io/writeups/dirichlet-conjugate-prior.pdf) — derivation of the posterior predictive formula used throughout this article.
+
+**Related Cybersecurity Work:**
+- Heard, N. and Rubin-Delanchy, P. "Network-wide anomaly detection via the Dirichlet process." *2016 IEEE Conference on Intelligence and Security Informatics (ISI)*. [Spiral Imperial](https://spiral.imperial.ac.uk/server/api/core/bitstreams/259ea697-900a-4534-9b74-32e7440c7afb/content) — uses the same LANL dataset with a Dirichlet Process (nonparametric) model; identifies C17693, C18025, C19932, C22409 as the confirmed red-team source computers, and C457/C663 appear in their example authentication records.
 
 **Dataset:**
 - LANL Comprehensive Multi-Source Cyber-Security Events: [csr.lanl.gov/data/cyber1](https://csr.lanl.gov/data/cyber1/)
